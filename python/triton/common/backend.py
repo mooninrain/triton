@@ -109,7 +109,7 @@ def _path_to_binary(binary: str):
     base_dir = os.path.join(os.path.dirname(__file__), os.pardir)
     paths = [
         os.environ.get(f"TRITON_{binary.upper()}_PATH", ""),
-        os.path.join(base_dir, "third_party", "cuda", "bin", binary)
+        os.path.join(base_dir, "third_party", "cuda", "bin", binary),
     ]
 
     for p in paths:
@@ -147,7 +147,8 @@ def compute_core_version_key():
         contents += [hashlib.sha1(f.read()).hexdigest()]
     # compiler
     compiler_path = os.path.join(TRITON_PATH, 'compiler')
-    for lib in pkgutil.iter_modules([compiler_path]):
+    backends_path = os.path.join(TRITON_PATH, 'compiler', 'backends')
+    for lib in pkgutil.iter_modules([compiler_path, backends_path]):
         with open(lib.module_finder.find_spec(lib.name).origin, "rb") as f:
             contents += [hashlib.sha1(f.read()).hexdigest()]
     # backend

@@ -9,11 +9,11 @@ import textwrap
 from collections import defaultdict, namedtuple
 from functools import cached_property
 from typing import Callable, Generic, Iterable, List, Optional, TypeVar, Union, cast, overload
-
-from .._C.libtriton.triton import TMAInfos
 from ..common.backend import get_backend, get_cuda_version_key
 from .interpreter import InterpretedFunction
 from ..runtime.driver import driver
+
+TRITON_MODULE = __name__[:-len(".runtime.jit")]
 
 T = TypeVar("T")
 
@@ -41,8 +41,7 @@ class DependenciesFinder(ast.NodeVisitor):
         lhs = self.visit(node.value)
         while isinstance(lhs, ast.Attribute):
             lhs = self.visit(lhs.value)
-        if lhs is None or (getattr(lhs, "__name__", "") == "triton"
-                           or getattr(lhs, "__name__", "").endswith(".triton")):
+        if lhs is None or (getattr(lhs, "__name__", "") == TRITON_MODULE):
             return None
         return getattr(lhs, node.attr)
 
@@ -52,7 +51,7 @@ class DependenciesFinder(ast.NodeVisitor):
             return
         if inspect.isbuiltin(func):
             return
-        if func.__module__ and (func.__module__.startswith("triton.") or ".triton." in func.__module__):
+        if func.__module__ and (func.__module__.startswith(TRITON_MODULE)):
             return
         assert isinstance(
             func, JITFunction
@@ -338,7 +337,7 @@ class JITFunction(KernelInterface[T]):
 
     def run(self, *args, grid, warmup, **kwargs):
         from ..compiler import CompiledKernel, compile, ASTSource
-        from ..compiler.backends.cuda import CUDABackend
+        from ..compiler.backends import make_backend
         # deprecated arguments
         assert "device_type" not in kwargs, "device_type option is deprecated; current target will be used"
         assert "device" not in kwargs, "device option is deprecated; current device will be used"
@@ -347,7 +346,7 @@ class JITFunction(KernelInterface[T]):
         device = driver.get_current_device()
         stream = driver.get_current_stream(device)
         target = driver.get_current_target()
-        backend = CUDABackend(target)
+        backend = make_backend(target)
         kwargs["debug"] = self.debug
         options = backend.parse_options(kwargs)
         # bind non-reserved keyword args and set defaults
@@ -439,9 +438,6 @@ class JITFunction(KernelInterface[T]):
         self.kernel = None
         self.debug = True if os.environ.get("TRITON_DEBUG", "0") == "1" else debug
         self.noinline = noinline
-
-        # tma info
-        self.tensormaps_info = TMAInfos()
 
         # TODO(jlebar): Remove uses of these fields outside this file, then
         # remove the fields here.
